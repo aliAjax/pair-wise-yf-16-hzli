@@ -1,126 +1,95 @@
-import "./styles.css";
+import { useState } from "react";
+import { resetDemo, useStore } from "./store";
+import { OrderList } from "./components/OrderList";
+import { OrderDetail } from "./components/OrderDetail";
+import { NewOrderModal } from "./components/NewOrderModal";
+import { BatchPanel } from "./components/BatchPanel";
+import { CustomerHistory } from "./components/CustomerHistory";
+import type { Order } from "./types";
 
-const project = {
-  "sourceNo": 6,
-  "id": "hxyfront-62004",
-  "port": 62004,
-  "title": "滑雪板调校维护",
-  "domain": "滑雪装备调校",
-  "prompt": "我想做一个面向滑雪板调校店的装备维护前端系统，技师可以记录雪板品牌、长度、板型、刃角、打蜡类型、底板损伤、修补位置和客户偏好。页面需要有维护工单列表、刃角参数表、底板损伤标记区、完工状态筛选和客户历史维护记录。",
-  "palette": [
-    "#0369a1",
-    "#14b8a6",
-    "#f97316"
-  ],
-  "metrics": [
-    "待维护",
-    "完工工单",
-    "平均刃角",
-    "底板修补"
-  ],
-  "filters": [
-    "全地域",
-    "公园板",
-    "竞速板",
-    "粉雪板"
-  ],
-  "fields": [
-    "雪板品牌",
-    "长度",
-    "板型",
-    "刃角",
-    "打蜡类型",
-    "底板损伤"
-  ],
-  "records": [
-    [
-      "ORD-106",
-      "Burton 156",
-      "侧刃88°，底刃1°",
-      "已打低温蜡"
-    ],
-    [
-      "ORD-112",
-      "竞速板165",
-      "底板划痕12cm",
-      "待补P-Tex"
-    ],
-    [
-      "ORD-118",
-      "粉雪板158",
-      "客户偏好弱咬雪",
-      "待交付"
-    ]
-  ]
-};
+function Metrics() {
+  const state = useStore();
+  const pending = state.orders.filter((o) => o.status === "待维护").length;
+  const reinspect = state.orders.filter((o) => o.status === "待复检").length;
+  const done = state.orders.filter((o) => o.status === "完工").length;
+  const repairs = state.orders.reduce(
+    (s, o) => s + o.damages.filter((d) => d.state === "已固化").length,
+    0,
+  );
+  const items: Array<[string, number, string?]> = [
+    ["待维护", pending],
+    ["待复检", reinspect],
+    ["完工工单", done],
+    ["底板已修补", repairs],
+  ];
+  return (
+    <section className="metrics">
+      {items.map(([label, value]) => (
+        <article key={label}>
+          <small>{label}</small>
+          <strong>{value}</strong>
+        </article>
+      ))}
+    </section>
+  );
+}
 
 function App() {
+  const state = useStore();
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const openOrder: Order | undefined = openId
+    ? state.orders.find((o) => o.id === openId)
+    : undefined;
+
   return (
     <main className="app">
       <section className="hero">
-        <p>{project.id} · 源提示词{project.sourceNo} · Port {project.port}</p>
-        <h1>{project.title}</h1>
-        <span>{project.prompt}</span>
+        <p>hxyfront-62004 · 雪板维护联动台 · Port 62004</p>
+        <h1>滑雪板调校维护</h1>
+        <span>
+          底板损伤 → 修补位置登记与 P-Tex 固化 → 抛光打蜡（选现有蜡批次，余量不足或同类蜡被冻结则整单拒绝）→
+          刃角联动 → 复检。全部数据仅保存在本浏览器 localStorage。
+        </span>
       </section>
 
-      <section className="metrics">
-        {project.metrics.map((metric: string, index: number) => (
-          <article key={metric}>
-            <small>{metric}</small>
-            <strong>{[86, 14, 7, 32][index] ?? 12}</strong>
-          </article>
-        ))}
-      </section>
+      <Metrics />
 
-      <section className="workspace">
-        <aside className="panel">
-          <h2>{project.domain}筛选</h2>
-          <div className="chips">
-            {project.filters.map((item: string) => (
-              <button key={item}>{item}</button>
-            ))}
-          </div>
-        </aside>
+      <div className="toolbar">
+        <button className="primary" onClick={() => setCreating(true)}>
+          ＋ 新建维护工单
+        </button>
+        <button
+          className="ghost"
+          onClick={() => {
+            if (confirm("重置为预置演示数据？当前浏览器内的改动将丢失。")) {
+              resetDemo();
+              setOpenId(null);
+            }
+          }}
+        >
+          重置演示数据
+        </button>
+      </div>
 
-        <section className="panel form-panel">
-          <div className="heading">
-            <div>
-              <p>专业字段</p>
-              <h2>新增记录</h2>
-            </div>
-            <button className="primary">保存草稿</button>
-          </div>
-          <div className="field-grid">
-            {project.fields.map((field: string) => (
-              <label key={field}>
-                <span>{field}</span>
-                <input placeholder={"填写" + field} />
-              </label>
-            ))}
-          </div>
-        </section>
-      </section>
-
-      <section className="panel">
-        <div className="heading">
-          <div>
-            <p>历史记录</p>
-            <h2>近期工作台</h2>
-          </div>
-          <button>导出摘要</button>
+      <div className="layout">
+        <div className="layout-main">
+          <OrderList orders={state.orders} onOpen={(o) => setOpenId(o.id)} />
+          <CustomerHistory orders={state.orders} onOpen={(o) => setOpenId(o.id)} />
         </div>
-        <div className="records">
-          {project.records.map((record: string[], index: number) => (
-            <article key={record.join("-")}>
-              <b>{String(index + 1).padStart(2, "0")}</b>
-              <div>
-                <h3>{record[0]}</h3>
-                <p>{record.slice(1).join(" · ")}</p>
-              </div>
-            </article>
-          ))}
+        <div className="layout-side">
+          <BatchPanel />
         </div>
-      </section>
+      </div>
+
+      <footer className="foot">
+        联动规则：未固化损伤禁止打蜡 · 打蜡原子占用批次并冻结同类蜡 · 打蜡后改刃角转待复检且占用保留 ·
+        复检不过退回重做并释放占用 · 完工占用转已耗
+      </footer>
+
+      {openOrder && <OrderDetail order={openOrder} onClose={() => setOpenId(null)} />}
+      {creating && <NewOrderModal onClose={() => setCreating(false)} />}
     </main>
   );
 }
