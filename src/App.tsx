@@ -1,125 +1,165 @@
+import { useMemo, useState } from "react";
 import "./styles.css";
+import OrderDetail from "./OrderDetail";
+import { BatchPanel, CustomerHistory, LogPanel, OrderList } from "./Panels";
+import { useWorkbench } from "./store";
+import { STATUS_FILTERS, STATUS_LABEL } from "./labels";
+import type { OrderStatus } from "./types";
 
-const project = {
-  "sourceNo": 6,
-  "id": "hxyfront-62004",
-  "port": 62004,
-  "title": "滑雪板调校维护",
-  "domain": "滑雪装备调校",
-  "prompt": "我想做一个面向滑雪板调校店的装备维护前端系统，技师可以记录雪板品牌、长度、板型、刃角、打蜡类型、底板损伤、修补位置和客户偏好。页面需要有维护工单列表、刃角参数表、底板损伤标记区、完工状态筛选和客户历史维护记录。",
-  "palette": [
-    "#0369a1",
-    "#14b8a6",
-    "#f97316"
-  ],
-  "metrics": [
-    "待维护",
-    "完工工单",
-    "平均刃角",
-    "底板修补"
-  ],
-  "filters": [
-    "全地域",
-    "公园板",
-    "竞速板",
-    "粉雪板"
-  ],
-  "fields": [
-    "雪板品牌",
-    "长度",
-    "板型",
-    "刃角",
-    "打蜡类型",
-    "底板损伤"
-  ],
-  "records": [
-    [
-      "ORD-106",
-      "Burton 156",
-      "侧刃88°，底刃1°",
-      "已打低温蜡"
-    ],
-    [
-      "ORD-112",
-      "竞速板165",
-      "底板划痕12cm",
-      "待补P-Tex"
-    ],
-    [
-      "ORD-118",
-      "粉雪板158",
-      "客户偏好弱咬雪",
-      "待交付"
-    ]
-  ]
-};
+interface Toast {
+  ok: boolean;
+  message: string;
+  key: number;
+}
 
 function App() {
+  const { state, dispatch } = useWorkbench();
+  const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
+  const [doneOnly, setDoneOnly] = useState(false);
+  const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState(state.orders[0]?.id ?? "");
+  const [historyCustomer, setHistoryCustomer] = useState<string | "all">("all");
+  const [toast, setToast] = useState<Toast | null>(null);
+
+  const selected = state.orders.find((o) => o.id === selectedId) ?? state.orders[0];
+
+  const metrics = useMemo(() => {
+    const pending = state.orders.filter((o) => o.status === "pending").length;
+    const done = state.orders.filter((o) => o.status === "done").length;
+    const avgSide =
+      state.orders.length === 0
+        ? 0
+        : state.orders.reduce((s, o) => s + o.edge.side, 0) / state.orders.length;
+    const repair = state.orders.reduce(
+      (n, o) => n + o.damages.filter((d) => d.cured).length,
+      0
+    );
+    return [
+      { label: "待维护", value: pending },
+      { label: "完工工单", value: done },
+      { label: "平均侧刃", value: `${avgSide.toFixed(1)}°` },
+      { label: "底板已修补", value: repair },
+    ];
+  }, [state.orders]);
+
+  function showResult(result: { ok: boolean; message: string }) {
+    setToast({ ...result, key: Date.now() });
+  }
+
   return (
     <main className="app">
       <section className="hero">
-        <p>{project.id} · 源提示词{project.sourceNo} · Port {project.port}</p>
-        <h1>{project.title}</h1>
-        <span>{project.prompt}</span>
+        <div>
+          <p>hxyfront-62004 · 雪板维护联动台</p>
+          <h1>滑雪板调校维护工作台</h1>
+          <span>
+            底板损伤登记修补位置并确认固化后才能抛光打蜡；打蜡必须选用现有蜡批次，余量不足或同类蜡被其他工单冻结时整单拒绝；
+            打蜡后改动刃角转待复检且批次占用保留，复检不通过退回重做。所有数据仅保存在浏览器本地。
+          </span>
+        </div>
+        <div className="hero-tools">
+          <button
+            onClick={() => {
+              if (confirm("确定恢复为预置演示数据？当前浏览器内的改动将被清除。")) {
+                dispatch({ type: "RESET" });
+                setSelectedId("ORD-106");
+                showResult({ ok: true, message: "已恢复预置工单、损伤与蜡批次数据" });
+              }
+            }}
+          >
+            恢复预置数据
+          </button>
+        </div>
       </section>
 
       <section className="metrics">
-        {project.metrics.map((metric: string, index: number) => (
-          <article key={metric}>
-            <small>{metric}</small>
-            <strong>{[86, 14, 7, 32][index] ?? 12}</strong>
+        {metrics.map((m) => (
+          <article key={m.label}>
+            <small>{m.label}</small>
+            <strong>{m.value}</strong>
           </article>
         ))}
       </section>
 
-      <section className="workspace">
-        <aside className="panel">
-          <h2>{project.domain}筛选</h2>
-          <div className="chips">
-            {project.filters.map((item: string) => (
-              <button key={item}>{item}</button>
-            ))}
-          </div>
-        </aside>
+      {toast && (
+        <div key={toast.key} className={`toast ${toast.ok ? "ok" : "err"}`}>
+          <span>{toast.ok ? "✓ " : "✕ "}{toast.message}</span>
+          <button onClick={() => setToast(null)}>关闭</button>
+        </div>
+      )}
 
-        <section className="panel form-panel">
+      <section className="workspace">
+        <aside className="panel left-panel">
           <div className="heading">
             <div>
-              <p>专业字段</p>
-              <h2>新增记录</h2>
+              <p className="eyebrow">完工状态筛选</p>
+              <h2>维护工单</h2>
             </div>
-            <button className="primary">保存草稿</button>
           </div>
-          <div className="field-grid">
-            {project.fields.map((field: string) => (
-              <label key={field}>
-                <span>{field}</span>
-                <input placeholder={"填写" + field} />
-              </label>
-            ))}
-          </div>
-        </section>
-      </section>
 
-      <section className="panel">
-        <div className="heading">
-          <div>
-            <p>历史记录</p>
-            <h2>近期工作台</h2>
-          </div>
-          <button>导出摘要</button>
-        </div>
-        <div className="records">
-          {project.records.map((record: string[], index: number) => (
-            <article key={record.join("-")}>
-              <b>{String(index + 1).padStart(2, "0")}</b>
-              <div>
-                <h3>{record[0]}</h3>
-                <p>{record.slice(1).join(" · ")}</p>
-              </div>
-            </article>
-          ))}
-        </div>
+          <label className="done-switch">
+            <input
+              type="checkbox"
+              checked={doneOnly}
+              onChange={(e) => setDoneOnly(e.target.checked)}
+            />
+            <span>只看完工工单</span>
+          </label>
+
+          {!doneOnly && (
+            <div className="chips filter-chips">
+              {STATUS_FILTERS.map((f) => (
+                <button
+                  key={f.key}
+                  className={statusFilter === f.key ? "chip-on" : ""}
+                  onClick={() => setStatusFilter(f.key)}
+                >
+                  {f.key === "all" ? "全部" : STATUS_LABEL[f.key as OrderStatus]}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <input
+            className="search"
+            placeholder="搜索工单号 / 客户 / 品牌"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+
+          <OrderList
+            state={state}
+            statusFilter={statusFilter}
+            doneOnly={doneOnly}
+            query={query}
+            selectedId={selected?.id ?? ""}
+            onSelect={setSelectedId}
+          />
+        </aside>
+
+        <section className="panel detail-panel">
+          {selected ? (
+            <OrderDetail
+              key={selected.id}
+              state={state}
+              order={selected}
+              dispatch={dispatch}
+              onResult={showResult}
+            />
+          ) : (
+            <p className="muted">暂无工单。</p>
+          )}
+        </section>
+
+        <aside className="right-rail">
+          <BatchPanel state={state} />
+          <CustomerHistory
+            state={state}
+            customer={historyCustomer}
+            onPick={setHistoryCustomer}
+          />
+          <LogPanel state={state} />
+        </aside>
       </section>
     </main>
   );

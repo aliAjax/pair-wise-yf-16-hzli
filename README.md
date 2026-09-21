@@ -16,3 +16,19 @@ npm run dev
 ```
 
 开发端口：62004
+
+## 联动业务规则
+
+- **预置数据**：工单自带底板损伤（未修/已登记/已固化）、刃角（侧刃/底刃）与打蜡状态，数据保存在浏览器 `localStorage`。
+- **损伤门禁**：未修损伤必须先登记修补位置、再确认固化，才能抛光打蜡。
+- **打蜡整单拒绝**：打蜡必须选用现有蜡批次；余量不足或同类蜡正被其他未完工工单冻结时，工单、批次余量和损伤记录全部保持原样。
+- **刃角复检联动**：打蜡后改动刃角，工单转「待复检」且批次占用保留；复检不通过退回「重做中」，重做后可重新送复检。
+- **同步视图**：完工状态筛选、蜡批次余量与冻结标记、客户历史维护记录实时联动；右上角可一键恢复预置数据。
+
+## 规则校验
+
+```bash
+npx esbuild scripts/check-rules.mjs --bundle --platform=node --format=esm \
+  --outfile=scripts/.check-bundle.mjs --alias:react=./scripts/react-stub.mjs \
+  && node scripts/.check-bundle.mjs
+```
